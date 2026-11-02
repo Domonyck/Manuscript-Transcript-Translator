@@ -1,0 +1,7 @@
+Engine,Type,Input image,Lines read,Time (s),CER %,WER %,CER % (relaxed),WER % (relaxed),Language / model
+Tesseract full page,OCR,binarized,28,1.02,15.3,54.7,11.1,41.8,Tesseract 'spa'
+Tesseract per line,OCR,binarized,28,2.69,16.0,53.7,12.9,43.8,Tesseract 'spa'
+Tesseract full page,OCR,grayscale,28,0.89,9.4,32.8,6.8,24.9,Tesseract 'spa'
+Tesseract per line,OCR,grayscale,28,2.68,12.9,37.8,10.4,31.3,Tesseract 'spa'
+TrOCR per line,HTR,binarized,28,25.93,22.6,70.1,19.1,47.3,microsoft/trocr-base-handwritten
+TrOCR per line,HTR,grayscale,28,27.06,28.9,82.1,24.1,60.2,microsoft/trocr-base-handwritten

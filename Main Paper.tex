@@ -1,0 +1,510 @@
+% =====================================================================
+%  Preserving Archival Heritage: A Machine Learning Model Language for
+%  Spanish Transcripts  --  CSEC.303 Midterm Project (Phase 1) report
+%  Compile with:  pdflatex main.tex  (run twice)  or  latexmk -pdf main.tex
+%  All figures are read from ./figures/
+% =====================================================================
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[letterpaper,margin=0.75in,columnsep=0.28in,top=0.85in,bottom=0.8in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{mathptmx}
+\usepackage[scaled=0.9]{helvet}
+\usepackage{courier}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{float}
+\usepackage[hidelinks]{hyperref}
+\usepackage[font=small,labelfont=bf,labelsep=period]{caption}
+
+\definecolor{accent}{HTML}{4B3FB8}
+\definecolor{softbox}{HTML}{F1EFFB}
+\definecolor{warnbox}{HTML}{FFF4E5}
+
+\captionsetup{skip=4pt}
+\setlist{nosep,leftmargin=1.4em}
+\setlength{\parindent}{1.2em}
+\setlength{\parskip}{0pt}
+\renewcommand{\arraystretch}{1.12}
+
+% ---- headings ----
+\titleformat{\section}{\large\bfseries\sffamily\color{accent}}{\thesection.}{0.5em}{\MakeUppercase}
+\titleformat{\subsection}{\normalsize\bfseries\sffamily}{\thesubsection}{0.5em}{}
+\titleformat{\subsubsection}{\small\bfseries\sffamily\itshape}{\thesubsubsection}{0.5em}{}
+\titlespacing*{\section}{0pt}{10pt}{4pt}
+\titlespacing*{\subsection}{0pt}{7pt}{2pt}
+\titlespacing*{\subsubsection}{0pt}{5pt}{1pt}
+
+% ---- header / footer ----
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.3pt}
+\fancyhead[C]{\small\textbf{CSEC.303} $|$ Digital Image Processing}
+\fancyfoot[L]{\small\thepage\ \textcolor{red}{$|$}}
+\fancyfoot[R]{\small\textit{Preserving Archival Heritage}}
+
+% ---- helpers ----
+\newcommand{\sample}{\texttt{sample.txt}}
+\newcommand{\pp}{\,pp}
+\newcommand{\callout}[2]{%
+  \par\medskip\noindent\colorbox{#1}{\parbox{\dimexpr\columnwidth-2\fboxsep}{\small #2}}\par\medskip}
+\newcommand{\finding}[1]{\callout{softbox}{\textbf{Finding.} #1}}
+\newcommand{\caveat}[1]{\callout{warnbox}{\textbf{Caveat.} #1}}
+
+\begin{document}
+
+% =====================================================================
+%  TITLE BLOCK
+% =====================================================================
+\twocolumn[{%
+\begin{center}
+  {\sffamily\bfseries\Huge\color{accent} CSEC.303}\\[3pt]
+  {\small Ateneo de Naga University $\cdot$ College of Computer Studies}\\[10pt]
+  {\LARGE\bfseries Preserving Archival Heritage: A Machine Learning Model\\
+  Language for Spanish Transcripts}\\[8pt]
+  {\large\bfseries Francine Angela Elopre\quad Dominique Valencia}\\[2pt]
+  {\small Midterm Project, Phase 1 --- Documentation of the prototype and its experimental results}
+\end{center}
+\vspace{4pt}
+\begin{center}
+\begin{minipage}{0.92\textwidth}
+\small
+\textbf{\sffamily ABSTRACT.}\;
+Historical archives from the Philippine-American War (1899--1902) hold vital records of the nation's past, yet much of this heritage remains inaccessible because it is written in period Spanish, with archaic spellings, abbreviations and degraded paper. Standard digitization captures images but not meaning. This study develops and evaluates a three-stage prototype that converts a scanned manuscript page into readable modern English: (1) OpenCV preprocessing (grayscale conversion, denoising, lighting normalization, CLAHE, deskewing, thresholding), (2) text recognition with Tesseract OCR and TrOCR, and (3) neural machine translation with a pretrained Marian model plus rule-based spelling modernization. The intended dataset is about 44 scans obtained through the University of Nueva Caceres Museum; this Phase~1 report evaluates the pipeline on one page (\texttt{735771.png}) against a manual transcription. On that page, Tesseract on the CLAHE-enhanced \emph{grayscale} image reached the lowest error (9.4\% CER, 32.8\% WER), while hard binarization lowered Tesseract's accuracy (15.3\% CER on the binarized page). Line segmentation found 28 boxes for a page with 22 text lines: five boxes were produced by punch holes and paper loss, and one word was split from its line. The off-the-shelf translation model is trained on modern Spanish, and the spelling-modernization starter list changed nothing on this page. We also report a methodological problem in the translation scoring (the reference text was Spanish), so those scores are given as measured but cannot be treated as translation quality. The report closes with answers to the four research questions and a list of recommendations.\\[4pt]
+\textbf{\sffamily KEYWORDS.}\; Machine translation, historical Spanish, digital image processing, optical character recognition, OpenCV
+\end{minipage}
+\end{center}
+\vspace{6pt}
+}]
+
+% =====================================================================
+\section{Introduction}
+\subsection{Background of the Study}
+Historical archives preserve the written record of how societies lived, governed and fought, and for the Philippines a large part of that record is written in Spanish. Spanish was the language of colonial administration until 1898, and it remained the working language of the Philippine Revolution and the First Philippine Republic, including its constitution, correspondence and military orders. During the Philippine-American War (1899--1902) many of these documents were produced in the field and on poor paper, in a style that differs from modern Spanish in spelling, abbreviations, formal expressions and vocabulary. Collections such as the Philippine Insurgent Records hold many of these papers, and archives increasingly digitize them as scanned images to protect the originals.
+
+Digitization, however, saves only the picture of a document and not its meaning. A scanned page must still be read, transcribed and translated by someone trained in both paleography and period Spanish, and such experts are few. Standard commercial translation tools are trained mostly on modern, printed text, so they handle archaic spelling, wartime terminology and degraded text poorly. Machine learning combined with image processing libraries such as OpenCV offers a way to turn these scans into readable, searchable and translated text, so that the records of this period become accessible to historians, students and the general public.
+
+\subsection{Problem Context}
+Even when the text is recovered, it is written in period Spanish with old spellings and abbreviations, so general-purpose translators often produce errors or unreadable output. As a result, the people, deeds and sacrifices recorded in these documents stay locked inside images that few can read, and the history they hold risks going unnoticed.
+
+\subsection{Research Motivation}
+The researchers are motivated by the need to keep this history from going unnoticed. By building a model that takes a scanned transcript image, cleans it with OpenCV, recognizes its text and translates it into modern English, the study aims to give historians a faster way to recover records that would otherwise remain unread, and to help the public relearn and recognize the events and people of that period.
+
+\subsection{Research Questions}
+The study follows a three-stage pipeline: (1) image preprocessing with OpenCV, (2) text recognition (OCR/HTR) on the cleaned image, and (3) translation of the recognized Spanish text. The questions follow those stages, and Section~\ref{sec:rq} answers each one using the results of this report.
+\begin{itemize}
+  \item \textbf{RQ1:} How do OpenCV preprocessing techniques (grayscale conversion, noise removal, CLAHE contrast enhancement and deskewing) affect the legibility of degraded Philippine-American War manuscript images?
+  \item \textbf{RQ2:} Which thresholding technique (global, Otsu or adaptive) gives the clearest separation between text and the background in these images?
+  \item \textbf{RQ3:} How accurately can an OCR engine such as Tesseract with Spanish language data recognize text from the preprocessed images, measured by character error rate and word error rate?
+  \item \textbf{RQ4:} How accurately can a machine translation model translate the recognized text into modern English, measured by BLEU score and human review by historians?
+\end{itemize}
+
+\subsection{Objectives}
+\textbf{General objective.} To develop a machine learning model that reads scanned images of Spanish manuscripts from the Philippine-American War period and translates them into modern English, so that historians can access and preserve these records.
+
+\textbf{Specific objectives.}
+\begin{enumerate}
+  \item Build an OpenCV preprocessing pipeline (grayscale conversion, denoising, CLAHE and deskewing) that improves the legibility of degraded manuscript images.
+  \item Compare global, Otsu and adaptive thresholding and select the one that best separates text from the background.
+  \item Integrate an OCR engine that extracts Spanish text from the preprocessed images and measure its accuracy using character and word error rates.
+  \item Fine-tune a machine translation model on period Spanish text and its English translations so that it handles archaic spelling and vocabulary.
+  \item Evaluate the complete image-to-translation workflow using BLEU score and the feedback of historians or Spanish-language experts.
+\end{enumerate}
+
+\subsection{Significance of the Study}
+\textbf{Historians and researchers} gain a faster way to read and translate manuscripts of the Philippine-American War. \textbf{Archivists and librarians} gain a method to turn scanned collections into searchable, translated text, which supports the long-term preservation of fragile records. \textbf{Students and the general public} gain access to primary sources in a language they can read. \textbf{Future researchers} gain a documented pipeline and evaluation results that can be extended to other periods, handwriting styles or languages.
+
+\subsection{Scope and Limitations}
+\textbf{Scope.} The study covers a translation model for the Spanish used by people during the Philippine-American War (1899--1902). It includes OpenCV image preprocessing, text recognition on the cleaned images, and Spanish-to-English translation of the recognized text, using scanned transcript images as input.
+
+\textbf{Limitations.}
+\begin{itemize}
+  \item The model is trained and tested only on period Spanish from the Philippine-American War and is not meant for modern Spanish or other historical periods.
+  \item Documents in Tagalog, other Philippine languages or English are not covered, even when they appear in the same collections.
+  \item Results depend on the quality and number of available scanned images and parallel translations, which may be small.
+  \item Severely damaged, torn or faded pages, and unusual handwriting, may not be recognized correctly.
+  \item The output is a machine-generated aid and should be checked by a historian or Spanish-language expert before it is used as a formal translation.
+\end{itemize}
+
+% =====================================================================
+\section{Review of Related Literature}
+Machine translation can make historical languages more accessible by converting texts into modern languages that readers of the modern world can understand. This benefits researchers, students, historians and the public by giving them access to linguistic and cultural information that would otherwise need a deeper understanding of the field.
+
+Sobhy et al.\ \cite{sobhy} applied image processing and computer vision to detect hieroglyphic symbols in scanned images and translate them into English, but met difficulties from limited data, symbol complexity and uneven glyph representation. Miyagawa \cite{miyagawa} used the Marian neural translation framework for Japanese--Ainu, an endangered language, and obtained a SacreBLEU score of 32.90, showing the potential of machine translation with low resources. Together they show that translation quality depends on the availability and quality of training data. Older Spanish transcripts contain archaic spellings, specialized vocabulary and expressions whose meanings differ from modern usage, so a model trained on modern Spanish may not translate them reliably.
+
+Neural machine translation learns the relation between a source and a target language from examples of translated text. Pretrained models already hold linguistic representations learned from large datasets, which can be adapted to a language pair through additional training. Puranik et al.\ \cite{puranik} fine-tuned a pretrained model for English--Marathi and obtained promising BLEU results, while noting that fine-tuning depends on the quality and quantity of the added data.
+
+Khan et al.\ \cite{khan} examined how OCR technologies (CNNs, SeqCLR, Vision Transformers and TrOCR) can convert historical document images into machine-readable text, noting that accuracy depends on document quality. Before recognition, the image has to be prepared: Boudraa et al.\ \cite{boudraa} proposed a multi-stage binarization framework that applies CLAHE, combines thresholding methods and removes small noise, supporting contrast enhancement and thresholding as practical first steps for old manuscripts. Li et al.\ \cite{li} proposed TrOCR, an end-to-end model that combines a pretrained image Transformer with a pretrained text Transformer and outperformed earlier models on printed and handwritten text. Romero et al.\ \cite{romero} observed that automatic transcription of historical documents mostly produces diplomatic transcripts that only experts understand, and studied modernized transcripts instead. Domingo and Casacuberta \cite{domingo} noted that historical documents lack a consistent spelling convention and proposed statistical, neural and character-based translation approaches to normalize spelling, which suggests that normalizing archaic spelling before translation can help.
+
+Taken together, each stage has working solutions on its own: image enhancement \cite{boudraa}, text recognition \cite{khan,romero,li}, spelling normalization \cite{domingo}, and translation with limited data \cite{sobhy,miyagawa}. None of them combines these stages into one workflow for Spanish documents of the Philippine-American War. This gap is what the present study addresses.
+
+% =====================================================================
+\section{Methodology}
+\subsection{Research Design}
+The study employs a quantitative experimental and comparative design with qualitative evaluation. It develops and evaluates a three-stage pipeline: OpenCV preprocessing, text recognition (OCR/HTR), and neural machine translation.
+
+\subsection{Image Source and Acquisition}
+The collection comes from academic collaboration with the University of Nueva Caceres Museum (about 44 scans, PNG, approx.\ 300~DPI or higher, Philippine-American War period, 1899--1902). Inclusion: handwritten or printed historical Spanish documents of that era. Exclusion: documents in other languages or pages damaged beyond recognition. Access was obtained through formal research coordination with the museum for academic, non-commercial use. The files were transferred and stored as PNG to keep visual fidelity.
+
+\textbf{Test page used in this report.} All results below come from a single page, \texttt{data/735771.png} ($848\times1168$ px; Fig.~\ref{fig:pre}, first panel). The page is a \emph{typewritten} carbon-style copy with a row of punch holes along the top margin and several patches where the paper is missing or marked. It also contains an interleaved \emph{English} sentence (``On March 25, 1901, General Arejola announced\ldots''), an artifact of how the source was compiled. A manual, line-by-line transcription of the page is stored in \texttt{data/ground\_\allowbreak{}truth/sample.txt} (22 lines, one per manuscript line, original misspellings kept) and serves as the ground truth.
+
+\subsection{Implementation and Output Folders}
+The code is written in Python in Jupyter notebooks, one per stage (\texttt{preprocessing}, \texttt{text\_\allowbreak{}recognition}, \texttt{translation}). Results are saved to \texttt{outputs/processed\_\allowbreak{}images}, \texttt{outputs/recognition} (text files, \texttt{results.csv}, \texttt{per\_\allowbreak{}line\_\allowbreak{}binarized.csv}, line crops, figures) and \texttt{outputs/translation} (translated text, \texttt{results.csv}, \texttt{translations.csv}, figure). Section~\ref{sec:results} reads directly from these files.
+
+% =====================================================================
+\section{OpenCV Techniques}
+Every step is saved as its own image so its effect can be compared with the raw scan; the original file is never changed. Table~\ref{tab:steps} lists the steps and the parameter values used in the notebook.
+
+\begin{table}[t]
+\centering\small
+\caption{Preprocessing steps (OpenCV) and the settings used.}\label{tab:steps}
+\begin{tabular}{@{}p{0.31\columnwidth}p{0.62\columnwidth}@{}}
+\toprule
+\textbf{Step} & \textbf{OpenCV call and setting}\\
+\midrule
+1 Grayscale & \texttt{cvtColor} (BGR$\rightarrow$gray); one channel\\
+2 Noise removal & \texttt{fastNlMeansDenoising}, $h{=}10$, template 7, search 21\\
+3 Lighting normalization & \texttt{dilate} ($7{\times}7$) + \texttt{medianBlur} (21) estimate the paper background; \texttt{divide} flattens it\\
+4 Contrast (CLAHE) & \texttt{createCLAHE}, clip 2.0, tiles $8{\times}8$\\
+5 Deskewing & rotation search $\pm10^\circ$, step $0.5^\circ$ (variance of row sums); \texttt{warpAffine}\\
+6 Thresholding & global (127), Otsu, adaptive Gaussian (block 35, $C{=}5$)\\
+7 Cleanup & \texttt{morphologyEx} opening, $2{\times}2$ kernel\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two cleaned versions are kept for recognition: a \emph{grayscale} version (after deskewing, \texttt{05\_\allowbreak{}deskewed.png}) and a \emph{binarized} version (adaptive threshold plus cleanup, \texttt{07\_\allowbreak{}final.png}). Recognition engines may not prefer the same input, so both are tested.
+
+\textbf{Line segmentation.} Because TrOCR reads one line at a time, the binarized page is cut into text lines: ink is found with Otsu, ruled lines, borders and specks are removed, ink is smeared sideways so each line becomes one blob, blobs on the same line are joined, blobs about two lines tall are split, and ink from neighbouring lines is masked from each crop. The same boxes are cropped from both image versions so that all engines see identical lines. Settings: minimum component area 20~px, sideways smear $3.0\times$ and vertical smear $0.3\times$ letter height, minimum line height 15~px, minimum ink ratio 0.1.
+
+\textbf{Recognition and translation settings.} Tesseract 5.3.4 with Spanish data (\texttt{spa}), run on whole pages (\texttt{--psm 6}) and on single lines (\texttt{--psm 7}); TrOCR \texttt{microsoft/trocr-base-handwritten} (beam width 4); translation with the pretrained Marian model \texttt{Helsinki-NLP/opus-mt-es-en}, lines joined into passages of at most 400 tokens (hyphenated line ends repaired), run with spelling modernization off and on, scored with BLEU and chrF (SacreBLEU).
+
+% =====================================================================
+\section{Experimental Comparison: Plan versus Execution}
+Table~\ref{tab:plan} compares what Section~6 of the Phase~1 document planned with what the notebooks actually ran, so that no result is claimed beyond what was measured.
+
+\begin{table*}[t]
+\centering\small
+\caption{Planned comparisons and what was carried out on the test page.}\label{tab:plan}
+\begin{tabular}{@{}p{0.10\textwidth}p{0.30\textwidth}p{0.52\textwidth}@{}}
+\toprule
+\textbf{Comparison} & \textbf{Planned} & \textbf{Status in this report}\\
+\midrule
+A: preprocessing & Raw scan vs.\ each technique added one at a time, with CER recorded & Every step saved and compared \emph{visually}, plus pixel statistics (Sec.~\ref{sec:pre}). \textbf{Per-step CER was not measured}: the OCR check in the preprocessing notebook was skipped (Tesseract was not installed in that session). No Tesseract run on the raw scan.\\
+B: thresholding & Global vs.\ Otsu vs.\ adaptive, plus OCR effect & Compared visually and by pixel statistics. OCR was run on the binarized (adaptive+cleanup) and grayscale versions only, not once per threshold method.\\
+C: recognition & Tesseract (OCR) vs.\ TrOCR (HTR); binarized vs.\ grayscale; full page vs.\ line; strict and relaxed CER/WER; time & Done for six configurations (Sec.~\ref{sec:rec}). TrOCR was not fine-tuned.\\
+D1: modernization & Raw vs.\ rule-based spelling modernization & Done; \textbf{no effect} (Sec.~\ref{sec:trans}).\\
+D2: unit & Lines joined into passages vs.\ each line alone & Only the passage setting was run.\\
+D3: input text & Perfect transcription vs.\ OCR/HTR output & Done for four recognized texts.\\
+D4: model & Pretrained vs.\ fine-tuned on period Spanish--English pairs & Not done; only the pretrained modern-Spanish model was used.\\
+Review & Historian review of adequacy and fluency & Not yet done.\\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+% =====================================================================
+\section{Results and Discussion}\label{sec:results}
+
+% ---------------------------------------------------------------------
+\subsection{Preprocessing and Thresholding (Comparisons A and B)}\label{sec:pre}
+Figure~\ref{fig:pre} shows the original scan and every saved output of \texttt{outputs/processed\_\allowbreak{}images}. The raw scan has a pink-grey tint, a darker cast toward the top and bottom edges, and faint typewriter ink. Two measurements back up what the images show (Table~\ref{tab:prestats}). \emph{Background unevenness} is the standard deviation of the paper-background estimate (the same dilate-and-blur estimate used in Step~3); \emph{ink level} is the 5th-percentile gray value, a proxy for how dark the ink is because ink covers about 7\% of the page.
+
+\begin{figure*}[t]
+\centering
+\begin{subfigure}[t]{0.185\textwidth}\includegraphics[width=\linewidth]{figures/original.png}\caption{Original scan}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.185\textwidth}\includegraphics[width=\linewidth]{figures/01_gray.png}\caption{01 Grayscale}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.185\textwidth}\includegraphics[width=\linewidth]{figures/02_denoised.png}\caption{02 Denoised}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.185\textwidth}\includegraphics[width=\linewidth]{figures/03_lighting_normalized.png}\caption{03 Lighting normalized}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.185\textwidth}\includegraphics[width=\linewidth]{figures/04_clahe.png}\caption{04 CLAHE}\end{subfigure}\\[6pt]
+\begin{subfigure}[t]{0.185\textwidth}\includegraphics[width=\linewidth]{figures/05_deskewed.png}\caption{05 Deskewed (grayscale version)}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.185\textwidth}\includegraphics[width=\linewidth]{figures/06a_threshold_global.png}\caption{06a Global (127)}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.185\textwidth}\includegraphics[width=\linewidth]{figures/06b_threshold_otsu.png}\caption{06b Otsu}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.185\textwidth}\includegraphics[width=\linewidth]{figures/06c_threshold_adaptive.png}\caption{06c Adaptive Gaussian}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.185\textwidth}\includegraphics[width=\linewidth]{figures/07_final.png}\caption{07 Final (binarized version)}\end{subfigure}
+\caption{The preprocessing pipeline applied to \texttt{735771.png}. Panels (b)--(f) are the grayscale chain; panels (g)--(j) compare thresholding methods on the deskewed image, and (j) is the adaptive result after morphological cleanup.}\label{fig:pre}
+\end{figure*}
+
+\begin{table}[t]
+\centering\small
+\caption{Measured effect of the grayscale chain (computed from the saved images in \texttt{outputs/processed\_\allowbreak{}images}).}\label{tab:prestats}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Image} & \textbf{Mean gray} & \textbf{Backgr.\ std} & \textbf{Ink level (p5)}\\
+\midrule
+01 Grayscale & 207.8 & 9.99 & 186\\
+03 Lighting normalized & 250.8 & 0.13 & 226\\
+04 CLAHE & 247.6 & 0.38 & 204\\
+05 Deskewed & 247.6 & 0.36 & 204\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{What each step did.} Lighting normalization produced the largest change: the background unevenness fell from 9.99 to 0.13 gray levels and the tint and shadows disappeared, but it also washed the ink out (p5 rose from 186 to 226). CLAHE then restored contrast, darkening the ink to a p5 of 204 without bleaching the page. The estimated skew was only $-0.5^\circ$, so deskewing changed almost nothing on this page (Table~\ref{tab:prestats}, last two rows); it will matter more on tilted scans. Denoising is visually subtle on this clean typewritten page; no numeric effect was measured for it.
+
+\textbf{Thresholding (RQ2).} The three methods differ sharply (Table~\ref{tab:thresh}). A fixed global threshold of 127 keeps only 0.27\% of pixels as ink, since after normalization and CLAHE the ink is lighter than 127; 973 of its 1035 black components are specks of six pixels or fewer, i.e.\ the text dissolves into dots (Fig.~\ref{fig:pre}g). Otsu and adaptive Gaussian both recover complete lines. Adaptive thresholding retains slightly more stroke ink (7.82\% vs.\ 6.34\%), which matters for the faint typewriter ink, but it also produces more tiny components (170 vs.\ 35); the morphological cleanup removes almost all of them (13 remain) with little ink loss (7.66\%). This is why adaptive Gaussian plus cleanup was chosen as the binarized version.
+
+\begin{table}[t]
+\centering\small
+\caption{Thresholding comparison on the deskewed image (black pixels $<128$; 8-connected components; ``tiny'' $\leq6$ px).}\label{tab:thresh}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Method} & \textbf{Ink \%} & \textbf{Components} & \textbf{Tiny}\\
+\midrule
+Global (127) & 0.27 & 1035 & 973\\
+Otsu & 6.34 & 946 & 35\\
+Adaptive Gaussian & 7.82 & 1064 & 170\\
+Adaptive + cleanup (final) & 7.66 & 989 & 13\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\finding{Lighting normalization $+$ CLAHE are what make the page uniformly legible; global thresholding fails; Otsu and adaptive both work, with adaptive plus cleanup preferred. But the \emph{best OCR input turned out to be the grayscale image, not the binarized one} (Sec.~\ref{sec:rec}).}
+
+\caveat{Because per-step OCR was not run, we cannot say how many CER points each individual step is worth. The evidence for the chain as a whole is the recognition result below; the evidence for individual steps is visual and the pixel statistics above. These statistics are proxies computed for this report, not the planned CER-per-step measurement.}
+
+% ---------------------------------------------------------------------
+\subsection{Line Segmentation Against the Manual Transcription}\label{sec:seg}
+The segmenter found \textbf{28} text lines, whereas the manual transcription in \sample{} has \textbf{22}. The notebook therefore skipped its per-line comparison. We aligned the two by reading order. Fig.~\ref{fig:seg} shows the boxes, and the line crops are in \texttt{outputs/recognition/lines}. The result is:
+
+\begin{itemize}
+  \item \textbf{22 boxes} (5--8, 10--12, 14--28) map one-to-one, in order, to the 22 manual lines.
+  \item \textbf{5 boxes are not text} (boxes 1, 2, 3, 4 and 9).
+  \item \textbf{1 box is a fragment} of a real line (box 13, the word ``Arejola'').
+\end{itemize}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.9\columnwidth]{figures/line_segmentation.png}
+\caption{Detected line boxes drawn on the page (\texttt{line\_\allowbreak{}segmentation.png}). Boxes 1--4, 9 and 13 do not correspond to a manual line.}\label{fig:seg}
+\end{figure}
+
+\begin{table*}[t]
+\centering\small
+\caption{The six boxes that do not match a manual line, with what each engine ``read'' there (\texttt{per\_\allowbreak{}line\_\allowbreak{}binarized.csv}).}\label{tab:spurious}
+\begin{tabular}{@{}cp{0.34\textwidth}p{0.17\textwidth}p{0.17\textwidth}@{}}
+\toprule
+\textbf{Box} & \textbf{What is actually in the crop} & \textbf{Tesseract} & \textbf{TrOCR}\\
+\midrule
+1 & Row of punch holes along the top margin (gaps in the paper) & \texttt{Oco a-. ``o 2. 9} & \texttt{000 0.0.000}\\
+2 & Short smudge at left plus the rim of the large paper-loss patch at top right & \texttt{= IO} & \texttt{`` 2 )}\\
+3 & Further curved pieces of the same patch outline & \texttt{an >} & \texttt{I 9 .}\\
+4 & Bottom edge of that patch outline & \texttt{A} & \texttt{2nd}\\
+9 & A second, smaller paper-loss spot to the right of the ``Cuartel Grl.'' line & \texttt{(>} & \texttt{er}\\
+13 & The word ``Arejola'', cut off from line 12 (box 12) & \texttt{, \'Arejola.} & \texttt{`` Aregois .}\\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\textbf{Gaps in the paper and stray ink become ``lines.''} The five non-text boxes (Table~\ref{tab:spurious}) are all damage. Box~1 is the row of punch holes. Boxes~2--4 and 9 come from the areas where the paper is missing or marked: after normalization and thresholding, the \emph{edge} of such a patch becomes a thin black curve, and the sideways smear turns that curve into a ``line''-shaped blob. The tall-blob splitter then cut the large patch into several boxes. Both engines dutifully output characters for these crops (Fig.~\ref{fig:lines}), for example \texttt{Oco a-. ``o 2. 9} from punch holes, so the machine reports text where there is none. The same effect appears at a smaller scale: the outline of a patch inside box~6 adds the trailing ``\texttt{, 5)}'' (Tesseract) and ``\texttt{. ''}'' (TrOCR) after \emph{correspondientes}, and small marks beside lines 17--20 produce trailing artifacts such as \texttt{``a}, \texttt{4} and \texttt{It}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/line_examples.png}
+\caption{First six detected lines with both readings (\texttt{line\_\allowbreak{}examples.png}). Lines 1--4 are damage, not text; lines 5 and 6 are real lines, and line 6 has a trailing ink loop that was read as extra characters.}\label{fig:lines}
+\end{figure}
+
+\textbf{A split word.} Box~13 holds ``Arejola'', which belongs to the line ``On March 25, 1901, General Arejola announced to all inhabitants''. The word was boxed separately and removed from its own line, so line~12 is read as \texttt{Oeneral~\ldots~wnaced~to~ell,~1ebltante} by Tesseract and the word appears only as a stray fragment on its own line. This is the over-splitting case described in the notebook's tuning guide (``one line cut into several boxes'').
+
+\textbf{Per-line accuracy of the valid lines.} Table~\ref{tab:perline} gives the character error rate of each of the 22 matched lines against \sample{}, computed on the binarized crops. (We recomputed this ourselves from \texttt{per\_\allowbreak{}line\_\allowbreak{}binarized.csv} and \sample{}; the same code reproduces the notebook's page-level 16.0\% and 22.6\% exactly.) The mean over the 20 reliably aligned lines is \textbf{12.5\%} for Tesseract and \textbf{20.3\%} for TrOCR. Tesseract is better on 19 of the 22 lines.
+
+\begin{table*}[t]
+\centering\footnotesize
+\caption{Per-line CER (\%, strict) of the 22 matched lines, binarized crops. $\dagger$: the manual file breaks this sentence differently from the page, so the single-line figure is unreliable; compared jointly, manual lines 7--8 against boxes 12--14, CER is 31.9 (Tesseract) and 33.6 (TrOCR).}\label{tab:perline}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}rlrrr@{\hspace{14pt}}rlrrr@{}}
+\toprule
+\textbf{GT} & \textbf{Line starts with} & \textbf{Box} & \textbf{Tess.} & \textbf{TrOCR} & \textbf{GT} & \textbf{Line starts with} & \textbf{Box} & \textbf{Tess.} & \textbf{TrOCR}\\
+\midrule
+1 & Nuestra entrada sera & 5 & 18.3 & 21.7 & 12 & nuestra querida patria & 18 & 10.8 & 6.2\\
+2 & pina con uniformes & 6 & 12.5 & 8.3 & 13 & ba persuales y hacer & 19 & 14.1 & 17.2\\
+3 & Dios gda. a.v.m. & 7 & 31.8 & 54.5 & 14 & ner gobiernao propio & 20 & 7.7 & 21.5\\
+4 & Cuartel Grl. de Taban & 8 & 9.5 & 14.3 & 15 & publica que el Presid. & 21 & 6.2 & 7.8\\
+5 & El Gral. de Brigada & 10 & 5.3 & 15.8 & 16 & del Gobierno de los & 22 & 7.7 & 13.8\\
+6 & (Signado) Ludovico & 11 & 15.4 & 30.8 & 17 & MacArthur, que America & 23 & 13.8 & 18.5\\
+7$^\dagger$ & On March 25, 1901, & 12 & 70.6 & 91.2 & 18 & rizar a los Filipinos & 24 & 12.1 & 21.2\\
+8$^\dagger$ & announced to all & 14 & 39.7 & 42.3 & 19 & ices y traer el & 25 & 7.2 & 31.9\\
+9 & ``Mis queridos paisanos & 15 & 18.4 & 26.3 & 20 & suelo en un Estado & 26 & 4.7 & 9.4\\
+10 & Nadie de vosotros & 16 & 9.3 & 9.3 & 21 & componen la Federacion & 27 & 6.2 & 21.9\\
+11 & campo, no me proponia & 17 & 21.3 & 31.1 & 22 & equivaldria a la & 28 & 16.9 & 24.6\\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\textbf{How much the false lines cost.} Joining all 28 boxes gives the reported page-level CER (Tesseract 16.0\%, TrOCR 22.6\%). If the five non-text boxes are removed, strict CER falls to \textbf{13.5\%} and \textbf{20.1\%} respectively, so about 2.5 CER points of the error are caused by segmentation noise rather than by the recognizers themselves. The hardest valid lines are those with the English sentence (7--8), the typewriter-formula line 3 (``Dios gda. a.v.m.s.a.s.'', mostly punctuation and abbreviations), and lines carrying stray marks (6, 11, 19).
+
+\finding{Segmentation is not yet reliable: \textbf{28 boxes for 22 lines} (5 false lines caused by punch holes and paper loss, 1 split word). The 22 genuine lines are all found and in the right order, so the transcript can be aligned, but every downstream stage inherits the false lines.}
+
+% ---------------------------------------------------------------------
+\subsection{Text Recognition (Comparison C)}\label{sec:rec}
+Table~\ref{tab:rec} reproduces \texttt{outputs/recognition/results.csv} and Fig.~\ref{fig:rec} is \texttt{comparison.png}. Scores compare the whole page (all detected lines joined) with \sample{}; ``strict'' compares exactly, ``relaxed'' ignores case, accents and punctuation.
+
+\begin{table*}[t]
+\centering\small
+\caption{Recognition results on \texttt{735771.png} (\texttt{results.csv}). Lower is better. Best values in bold.}\label{tab:rec}
+\begin{tabular}{@{}llrrrrrr@{}}
+\toprule
+\textbf{Engine} & \textbf{Input image} & \textbf{Time (s)} & \textbf{CER \%} & \textbf{WER \%} & \textbf{CER \% relaxed} & \textbf{WER \% relaxed} & \textbf{Lines}\\
+\midrule
+Tesseract full page & binarized & 1.02 & 15.3 & 54.7 & 11.1 & 41.8 & 28\\
+Tesseract per line & binarized & 2.69 & 16.0 & 53.7 & 12.9 & 43.8 & 28\\
+Tesseract full page & grayscale & \textbf{0.89} & \textbf{9.4} & \textbf{32.8} & \textbf{6.8} & \textbf{24.9} & 28\\
+Tesseract per line & grayscale & 2.68 & 12.9 & 37.8 & 10.4 & 31.3 & 28\\
+TrOCR per line & binarized & 25.93 & 22.6 & 70.1 & 19.1 & 47.3 & 28\\
+TrOCR per line & grayscale & 27.06 & 28.9 & 82.1 & 24.1 & 60.2 & 28\\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/recognition_comparison.png}
+\caption{CER and WER for each engine and input image (\texttt{comparison.png}, strict scoring).}\label{fig:rec}
+\end{figure}
+
+\textbf{The grayscale image is the better input for Tesseract.} Tesseract on the CLAHE-enhanced grayscale page reads with a 9.4\% CER and 32.8\% WER, against 15.3\% and 54.7\% on the binarized page. This is the clearest evidence that the lighting normalization and contrast steps of Sec.~\ref{sec:pre} make recognition smoother: the engine does its own thresholding and loses less on a flattened gray image than on our hard black-and-white version, where thin typewriter strokes break into fragments (typical errors: \texttt{pereuales} for ``persuales'', \texttt{pa:rie} for ``patria''). The same holds per line (12.9\% vs.\ 16.0\%).
+
+\textbf{TrOCR prefers the binarized input, but is much worse overall.} The binarized crops gave 22.6\% CER, the grayscale crops 28.9\%, the opposite of Tesseract. TrOCR is also about $10\times$ to $30\times$ slower (26--27~s vs.\ 0.9--2.7~s for the page). Its errors are of a different kind: it produces English words from Spanish text (for example \texttt{reports} for ``proponia'', \texttt{denies} for ``libertades'', \texttt{progress} for ``progreso''), because the released model was trained on English handwriting (IAM), not Spanish. On the grayscale crops it even emitted whole English phrases such as \texttt{off over 200 to the sea} for punch holes. Two further factors hurt it: the test page is \emph{typewritten}, a style the handwriting model was not built for, and TrOCR resizes each crop to a $384\times384$ square, which squeezes lines that are 700~px wide.
+
+\textbf{Strict vs.\ relaxed.} Ignoring case, accents and punctuation lowers Tesseract's grayscale full-page CER from 9.4\% to 6.8\% and its WER from 32.8\% to 24.9\%, so about a quarter to a third of its error is only diacritics, case and punctuation. For TrOCR on grayscale the gap is larger in words (82.1\% to 60.2\%). WER is always much higher than CER because one wrong character invalidates a whole word and line-end hyphenation splits words.
+
+\textbf{Full page vs.\ per line.} For Tesseract, whole-page reading beat per-line reading in both image versions on CER (9.4 vs.\ 12.9 grayscale; 15.3 vs.\ 16.0 binarized). Per-line reading depends on the segmentation, so it inherits the false lines and the split word of Sec.~\ref{sec:seg}; whole-page reading did not need segmentation but also read the damage at the top (first lines of \texttt{tesseract\_\allowbreak{}full\_\allowbreak{}page\_\allowbreak{}\_\allowbreak{}*.txt}).
+
+\finding{Best configuration on this page: \textbf{Tesseract (\texttt{spa}), full page, on the grayscale image: 9.4\% CER, 32.8\% WER} (6.8\% / 24.9\% relaxed). TrOCR (English handwriting model) is worse and slower. The result holds for one typewritten page and should not be generalized to handwritten pages.}
+
+\caveat{\texttt{outputs/recognition/ground\_\allowbreak{}truth\_\allowbreak{}TEMPLATE.txt} is \emph{not} the ground truth: it is an auto-generated file (Tesseract's per-line binarized output, 28 rows) that the notebook writes to help someone correct a transcript. The ground truth used for every score is \texttt{data/ground\_\allowbreak{}truth/sample.txt}.}
+
+% ---------------------------------------------------------------------
+\subsection{Translation (Comparison D)}\label{sec:trans}
+The translation folder contains one text file per source and spelling-modernization setting. Table~\ref{tab:files} explains the three kinds of source, and Table~\ref{tab:trans} gives \texttt{outputs/translation/results.csv}; Fig.~\ref{fig:trans} is the corresponding \texttt{comparison.png}.
+
+\begin{table}[t]
+\centering\small
+\caption{The translation text files (each exists as \texttt{\_\allowbreak{}\_\allowbreak{}modernized\_\allowbreak{}off} and \texttt{\_\allowbreak{}\_\allowbreak{}modernized\_\allowbreak{}on}).}\label{tab:files}
+\begin{tabular}{@{}p{0.25\columnwidth}p{0.68\columnwidth}@{}}
+\toprule
+\textbf{File prefix} & \textbf{Spanish text that was translated}\\
+\midrule
+\texttt{ground\_\allowbreak{}truth\_\allowbreak{}perfect\_\allowbreak{}transcription} & The manual transcription \sample{} (22 lines): measures the translation model alone.\\
+\texttt{tesseract\_\allowbreak{}per\_\allowbreak{}line\_\allowbreak{}*} & Tesseract's 28 per-line readings (binarized and grayscale), including the false lines.\\
+\texttt{trocr\_\allowbreak{}per\_\allowbreak{}line\_\allowbreak{}*} & TrOCR's 28 per-line readings (binarized and grayscale), including the false lines.\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering\small
+\caption{Translation scores as produced by the notebook (\texttt{results.csv}; model \texttt{opus-mt-es-en}). The identical Off/On rows are merged. \textbf{See the scoring caveat below.}}\label{tab:trans}
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Source text} & \textbf{BLEU} & \textbf{chrF} & \textbf{$\Delta$chrF} & \textbf{Out/In words}\\
+\midrule
+Ground truth & 16.3 & 37.7 & 0.0 & 157/201\\
+Tesseract, binarized & 8.4 & 29.7 & $-8.0$ & 142/222\\
+Tesseract, grayscale & 6.3 & 32.7 & $-5.0$ & 145/218\\
+TrOCR, binarized & 3.9 & 29.1 & $-8.6$ & 159/243\\
+TrOCR, grayscale & 4.3 & 32.2 & $-5.5$ & 183/253\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/translation_comparison.png}
+\caption{Translation quality by recognized text (\texttt{comparison.png}); each source appears twice, with modernization off and on, with identical bars.}\label{fig:trans}
+\end{figure}
+
+\subsubsection{Recognition errors reduce translation quality}
+Even with a perfect transcription the score is only 16.3 BLEU and 37.7 chrF. Feeding the OCR/HTR text lowers chrF by 5 to 8.6 points and BLEU to between 3.9 and 8.4, as expected: garbage from the false lines (such as \texttt{Oco a-. ``or 2. 9 = IO an > A}) passes through the translator unchanged, and misspelled Spanish words (\texttt{goblena}, \texttt{Pilipinas}, \texttt{zincerided}) are left untranslated or mistranslated. The ordering by chrF is ground truth $>$ Tesseract grayscale $>$ TrOCR grayscale $>$ Tesseract binarized $>$ TrOCR binarized, which mirrors the recognition results: the grayscale input helps the translation too. The BLEU ordering differs (Tesseract binarized is higher than Tesseract grayscale), which shows how unstable these numbers are on a single 200-word passage.
+
+\subsubsection{Why the translations are off: the modern-Spanish model}
+The translator (\texttt{Helsinki-NLP/opus-mt-es-en}) was trained on \emph{modern} Spanish. Its failures on the \emph{perfect} transcription, where recognition cannot be blamed, are the clearest evidence (Table~\ref{tab:examples}). Phrases written in ordinary Spanish translate well (``Nuestra entrada sera presidida por la bandera Nacional Filipina'' $\rightarrow$ ``Our entrance will be presided by the Philippine National flag''; ``yo, al lanzarme al campo'' $\rightarrow$ ``I, by launching myself into the field''). It fails on what is period-specific, misspelled by the typist, abbreviated or a proper noun.
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{Errors in the translation of the \emph{perfect} transcription (modernization off).}\label{tab:examples}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}p{0.25\columnwidth}p{0.27\columnwidth}p{0.4\columnwidth}@{}}
+\toprule
+\textbf{Spanish source} & \textbf{Model output} & \textbf{Problem}\\
+\midrule
+Ambos Camarines & Both Camarines & Proper noun translated as the common word ``ambos''\\
+Dios gda.\ a.v.m.s.a.s. & God gda.\ a.v.m.a.s. & Stock closing formula and abbreviations not expanded\\
+esta | ba persuales & this basual & Word split across lines without a hyphen (``estaba'') cannot be rejoined; ``persuales'' is a damaged/typed variant\\
+Filpinos & Fillines & Typo copied through\\
+esclarizar a los Filipinos & not equal the duties of the Filipinos & Apparent typing variant of \emph{esclavizar} (``to enslave''); meaning inverted\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Output is incomplete}
+The word counts in Table~\ref{tab:trans} show that every translation is \emph{shorter} than its input. The perfect transcription has 201 words but its translation has 157 and \emph{stops} at ``\ldots\,but to give them liberties and to make it happy.'' The last four manuscript lines (``y traer el progreso\ldots'' through ``\ldots la cinceridad de la'': the claim that statehood ``would be equivalent to independence'') have no counterpart in the output. The OCR-based translations lose even more: the Tesseract grayscale translation jumps from ``But having seen the solemn declaration'' directly to ``equal to the independence'', skipping roughly eight lines. A sentence-trained Marian model given one 400-token passage tends to end early or skip text, so these gaps are a property of how we fed the model, not of the page. They also mean the BLEU/chrF values compare incomplete outputs.
+
+\subsubsection{Spelling modernization had no effect}
+In every row the Off and On translations are identical, and the text files are byte-identical. The notebook's own preview printed ``no changes'' for all five sources. The modernization table is only a starter list (one-letter accented words \emph{\'a, \'e, \'o, \'u} and verbs such as \emph{di\'o, fu\'e}), and this typewritten page contains none of those. The spellings that actually hurt the translation (\emph{persuales}, \emph{consequis}, \emph{cinceridad}, \emph{constituition}, \emph{Filpinos}) are typing or damage variants that the table does not cover. So the experiment shows that \emph{this} table does nothing on \emph{this} page, not that spelling modernization is useless; it was never given the chance to act.
+
+\caveat{\textbf{The BLEU/chrF values in Table~\ref{tab:trans} and Fig.~\ref{fig:trans} are not valid measures of translation quality.} In the translation notebook the reference path is \texttt{data/ground\_\allowbreak{}truth/sample.txt}, the \emph{Spanish} transcription (201 words, identical to the ``REFERENCE (human)'' row in \texttt{translations.csv}), not an English human translation. The scores therefore compare English output with a Spanish text, and mostly reward tokens that are the same in both languages (names, numbers, cognates, untranslated Spanish). That is consistent with a perfect transcription scoring only 16.3 BLEU, and it means the ranking of the five sources may reflect leftover Spanish rather than translation quality. We could not re-run SacreBLEU here, so the values are reproduced exactly as the notebook reported them. A true English reference is needed before any score is quoted (Recommendation~5).}
+
+\finding{The translation chain works mechanically (a readable, partly correct English text is produced from a perfect transcription), but the output is \emph{incomplete}, mistranslates period-specific words, names and abbreviations, and degrades further with OCR/HTR noise. The main cause on perfect input is that the model is trained on modern Spanish; recognition noise and false lines add to it. The modernization step has not yet shown any effect.}
+
+% =====================================================================
+\section{Answers to the Research Questions}\label{sec:rq}
+\textbf{RQ1: How do the OpenCV techniques affect legibility?} Lighting normalization has the biggest effect, reducing paper-background unevenness from 9.99 to 0.13 gray levels and removing tint and shadows; CLAHE restores ink contrast (ink level 226 $\rightarrow$ 204); deskewing changed little because the estimated tilt was only $-0.5^\circ$; denoising is visually subtle on this clean page. As a chain, they give the best recognition input: Tesseract on the grayscale output reaches 9.4\% CER vs.\ 15.3\% on the binarized one. The per-step CER contribution was not measured.
+
+\textbf{RQ2: Which thresholding technique is clearest?} Global thresholding at 127 fails (0.27\% ink; text breaks into specks). Otsu and adaptive Gaussian both separate the text; adaptive keeps more stroke ink and, with morphological cleanup, leaves few specks (13), so it was selected. However, binarization of any kind did not improve OCR over the grayscale image for Tesseract, so thresholding is best treated as optional, and mainly useful for TrOCR (22.6\% vs.\ 28.9\% CER) and for line segmentation.
+
+\textbf{RQ3: How accurately can Tesseract recognize the text?} Best case: 9.4\% CER and 32.8\% WER (strict), or 6.8\% and 24.9\% (relaxed), full page, grayscale input. Per-line on binarized crops: 16.0\% CER, 12.5\% on the genuine lines. Accuracy is reduced by false lines from paper damage and by broken thin strokes. This holds for one typewritten page.
+
+\textbf{RQ4: How accurately does the translation model translate?} Not yet determinable. The off-the-shelf modern-Spanish model produces partly correct but incomplete English, fails on period-specific words, names and abbreviations, and the reported BLEU (16.3 on perfect input, 3.9--8.4 on recognized text) and chrF (29.1--37.7) were computed against a Spanish reference, so they are not translation-quality figures. No fine-tuned model was trained and no historian review was done.
+
+% =====================================================================
+\section{Limitations of This Phase}
+\begin{itemize}
+  \item \textbf{One page.} All results come from a single page (about 200 words), so differences of a few points are not statistically meaningful; BLEU in particular is unstable.
+  \item \textbf{Typewritten, not handwritten.} The page is typed. This favors Tesseract and says little about handwritten pages, which are the main target of the project.
+  \item \textbf{Ground truth line breaks.} \sample{} breaks the sentence ``On March 25\ldots'' differently from the page, which invalidates two single-line comparisons (Table~\ref{tab:perline}); page-level scores are unaffected because lines are joined.
+  \item \textbf{English text on the page.} The page includes an English sentence, which the Spanish recognizers and translator are not designed for.
+  \item \textbf{Scoring and planned comparisons.} The translation reference is Spanish, per-step CER, raw-scan OCR, passage-versus-line, fine-tuning and historian review were not performed (Table~\ref{tab:plan}).
+  \item \textbf{Our own measurements.} The pixel statistics (Tables~\ref{tab:prestats}, \ref{tab:thresh}), the per-line CER (Table~\ref{tab:perline}) and the noise-removed CER were computed for this report from the saved outputs; the page-level numbers were checked against the notebooks.
+\end{itemize}
+
+% =====================================================================
+\section{Recommendations}
+The following recommendations follow directly from the problems documented above. They are ordered roughly by how much they should improve the results.
+\begin{enumerate}
+  \item \textbf{Make line segmentation robust to damage.} Five of 28 boxes were punch holes and paper loss. (a) Exclude the punch-hole margin or detect and in-paint holes and paper-loss patches (blobs brighter than the paper, with no stroke structure) \emph{before} thresholding. (b) Raise the minimum ink ratio (the notebook's own tuning table suggests 0.25 for boxes on stains) and filter boxes by shape and recognizer confidence; reject a box whose OCR confidence is very low. (c) Raise the sideways smear (the guide suggests about 5) so that a word such as ``Arejola'' is not cut from its line. (d) Keep the manual-box option for hard pages. Validate each change by counting detected vs.\ true lines (here 22).
+  \item \textbf{Fix the ground truth.} Transcribe line by line exactly as the page breaks (the ``On March 25'' sentence), so per-line CER can be computed automatically, and have a Spanish-language expert verify the transcription.
+  \item \textbf{Use a translation model that knows period Spanish.} The current model is trained on modern Spanish. Fine-tune Marian on period Spanish--English pairs (Objective~4), as in related work \cite{puranik}, and compare it against the pretrained baseline (comparison D4). Until then, treat the output only as a rough aid.
+  \item \textbf{Translate by sentence, not by one long passage.} Split the joined text into sentences (repairing hyphenated \emph{and} unhyphenated line breaks such as ``esta / ba''), translate each sentence, and check that the output length is plausible, to prevent the dropped lines found in every translation. Run the planned line-versus-passage comparison.
+  \item \textbf{Correct the evaluation.} Provide a human \emph{English} reference translation (checked by a historian), re-run BLEU and chrF against it, and add the historian review of adequacy and fluency. Report the scores on several pages rather than one.
+  \item \textbf{Make spelling modernization effective.} Extend the table from the actual errors on the collection: typewriter and typing variants, period spellings and common abbreviations (for example the closing formula), ideally together with an OCR post-correction step using a Spanish word list. Report every change so it can be reviewed, as the notebook already does.
+  \item \textbf{Improve recognition.} Use Tesseract (\texttt{spa}) on the grayscale image as the baseline. Fine-tune TrOCR on Spanish line crops (the released model is English-only) and split long lines in two before recognition because of its $384\times384$ input. Add the planned raw-scan baseline and a per-step CER ablation to quantify RQ1, and test on handwritten pages.
+  \item \textbf{Scale the evaluation.} Run the full pipeline on the whole set of about 44 scans, including damaged and handwritten ones, report averages with spread, and keep a record of which pages fail and why.
+\end{enumerate}
+
+% =====================================================================
+\section{Conclusion}
+The prototype already turns a scanned page into a readable English approximation, and the experiments identify clear reasons for its remaining errors. Normalizing lighting and enhancing contrast give the best recognition input, and Tesseract on the grayscale image reads the test page with a 9.4\% character error rate. The pipeline is not yet reliable: line segmentation reads punch holes and paper damage as text, the translation model is trained on modern Spanish and drops or mistranslates period-specific material, the modernization table did not change anything, and the translation scores were computed against a Spanish reference. The machine is therefore not entirely perfect, and its output must be checked by a historian or Spanish-language expert. Addressing the recommendations above, particularly robust segmentation, a fine-tuned translation model and a proper English reference, is the path to a dependable workflow for Philippine-American War archives.
+
+% =====================================================================
+\begin{thebibliography}{9}\small\setlength{\itemsep}{1pt}
+\bibitem{sobhy} A. Sobhy, M. Helmy, M. Khalil, S. Elmasry, Y. Boules, and N. Negied, ``An AI Based Automatic Translator for Ancient Hieroglyphic Language---From Scanned Images to English Text,'' \emph{IEEE Access}, vol. 11, pp. 38796--38804, Apr. 2023. Available: \url{https://ieeexplore.ieee.org/document/10103702/}. Accessed: Oct. 11, 2026.
+\bibitem{khan} A. Khan, U. Rai, S. S. Singh, Y. Yamamoto, X. G. Ibarreche, H. Meadows, and S. Gleyzer, ``OCR Approaches for Humanities: Applications of Artificial Intelligence/Machine Learning on Transcription and Transliteration of Historical Documents,'' \emph{Digital Studies in Language and Literature}, vol. 1, no. 1--2, pp. 85--112, 2024. Available: \url{https://doi.org/10.1515/dsll-2024-0013}. Accessed: Oct. 11, 2026.
+\bibitem{miyagawa} S. Miyagawa, ``Machine Translation for Highly Low-Resource Language: A Case Study of Ainu, a Critically Endangered Indigenous Language in Northern Japan,'' in \emph{Proc. Joint 3rd Int. Conf. on NLP for Digital Humanities and 8th Int. Workshop on Computational Linguistics for Uralic Languages}, Tokyo, Japan, Dec. 2023, pp. 120--124. Available: \url{https://aclanthology.org/2023.nlp4dh-1.14/}. Accessed: Oct. 11, 2026.
+\bibitem{puranik} K. Puranik, A. Hande, R. Priyadharshini, T. Durairaj, A. Sampath, K. P. Thamburaj, and B. R. Chakravarthi, ``Attentive fine-tuning of Transformers for translation of low-resourced languages @LoResMT 2021,'' in \emph{Proc. 4th Workshop on Technologies for MT of Low Resource Languages (LoResMT2021)}, 2021, pp. 134--143.
+\bibitem{romero} V. Romero, A. H. Toselli, E. Vidal, J. A. S\'anchez, C. Alonso, and L. Marqu\'es, ``Modern vs Diplomatic Transcripts for Historical Handwritten Text Recognition,'' in \emph{Proc. PatReCH Workshop (ICIAP 2019)}, 2019. Available: \url{https://repositorio.iaph.es/bitstream/11532/329517/1/PatReCH-2019_ModVsDipl_Abstract_Romero%20et%20al.%202019.pdf}. Accessed: Oct. 12, 2026.
+\bibitem{domingo} M. Domingo and F. Casacuberta, ``Spelling Normalization of Historical Documents by Using a Machine Translation Approach,'' in \emph{Proc. 21st Annu. Conf. Eur. Assoc. Mach. Transl. (EAMT)}, Alicante, Spain, May 2018, pp. 149--158. Available: \url{https://aclanthology.org/2018.eamt-main.13}. Accessed: Oct. 14, 2026.
+\bibitem{boudraa} O. Boudraa, W. K. Hidouci, and D. Michelucci, ``A Robust Multi Stage Technique for Image Binarization of Degraded Historical Documents,'' IEEE, 2017. Available: \url{https://hal-univ-bourgogne.archives-ouvertes.fr/hal-01858390}. Accessed: Oct. 14, 2026.
+\bibitem{li} M. Li, T. Lv, J. Chen, L. Cui, Y. Lu, D. Florencio, C. Zhang, Z. Li, and F. Wei, ``TrOCR: Transformer-Based Optical Character Recognition with Pre-Trained Models,'' in \emph{Proc. AAAI Conf. Artif. Intell.}, vol. 37, no. 11, 2023. doi: 10.1609/AAAI.V37I11.26538. Available: \url{https://ojs.aaai.org/index.php/AAAI/article/view/26538}. Accessed: Oct. 14, 2026.
+\end{thebibliography}
+
+\end{document}

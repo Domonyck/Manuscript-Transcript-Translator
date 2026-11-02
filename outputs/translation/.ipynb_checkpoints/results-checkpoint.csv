@@ -1,0 +1,11 @@
+Source text,Spelling modernization,Lines in,Time (s),BLEU,chrF,chrF vs perfect input,Model
+Ground truth (perfect transcription),Off,22,6.71,16.3,37.7,0.0,Helsinki-NLP/opus-mt-es-en
+Ground truth (perfect transcription),On,22,6.56,16.3,37.7,0.0,Helsinki-NLP/opus-mt-es-en
+Tesseract per line (binarized),Off,28,5.63,8.4,29.7,-8.0,Helsinki-NLP/opus-mt-es-en
+Tesseract per line (binarized),On,28,5.42,8.4,29.7,-8.0,Helsinki-NLP/opus-mt-es-en
+Tesseract per line (grayscale),Off,28,4.89,6.3,32.7,-5.0,Helsinki-NLP/opus-mt-es-en
+Tesseract per line (grayscale),On,28,4.86,6.3,32.7,-5.0,Helsinki-NLP/opus-mt-es-en
+TrOCR per line (binarized),Off,28,4.99,3.9,29.1,-8.6,Helsinki-NLP/opus-mt-es-en
+TrOCR per line (binarized),On,28,4.98,3.9,29.1,-8.6,Helsinki-NLP/opus-mt-es-en
+TrOCR per line (grayscale),Off,28,5.89,4.3,32.2,-5.5,Helsinki-NLP/opus-mt-es-en
+TrOCR per line (grayscale),On,28,6.57,4.3,32.2,-5.5,Helsinki-NLP/opus-mt-es-en
